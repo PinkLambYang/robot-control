@@ -1,0 +1,12 @@
+websocket:
+  host: "0.0.0.0"
+  port: 8000
+  max_message_size: 104857600  # 100MB
+
+worker:
+  storage_dir: "./storage/projects"
+  max_execution_time: 300  # 5分钟
+  
+ipc:
+  command_socket: "ipc:///tmp/robot-control-cmd.ipc"
+  callback_socket: "ipc:///tmp/robot-control-callback.ipc"
