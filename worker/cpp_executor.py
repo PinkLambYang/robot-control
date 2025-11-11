@@ -1,4 +1,5 @@
 """C++可执行文件管理器"""
+from __future__ import annotations
 import os
 import subprocess
 import logging

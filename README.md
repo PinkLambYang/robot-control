@@ -13,7 +13,7 @@
 ## 安装依赖
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 ```
 
 ## 运行

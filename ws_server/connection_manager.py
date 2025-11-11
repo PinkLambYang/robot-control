@@ -1,4 +1,5 @@
 """单客户端连接管理器"""
+from __future__ import annotations
 import logging
 from typing import Optional
 

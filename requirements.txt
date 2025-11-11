@@ -1,3 +1,4 @@
+# Python 3.8+ 兼容
 fastapi>=0.104.1
 uvicorn>=0.24.0
 pyzmq>=26.0.0

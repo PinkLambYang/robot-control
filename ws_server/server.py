@@ -1,4 +1,5 @@
 """Socket.IO 服务器"""
+from __future__ import annotations
 import socketio
 import asyncio
 import logging

@@ -1,4 +1,5 @@
 """ZeroMQ进程间通信管理器"""
+from __future__ import annotations
 import zmq
 import json
 import logging

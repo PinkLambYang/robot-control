@@ -1,4 +1,5 @@
 """WebSocket协议定义和验证"""
+from __future__ import annotations
 from typing import Dict, Any, Optional
 import json
 import logging

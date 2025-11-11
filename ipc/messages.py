@@ -1,4 +1,5 @@
 """消息格式定义"""
+from __future__ import annotations
 from typing import Dict, Any, Literal
 from dataclasses import dataclass, asdict
 import json

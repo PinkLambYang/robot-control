@@ -1,10 +1,11 @@
 """项目管理器：处理zip解压和项目类型识别"""
+from __future__ import annotations
 import os
 import shutil
 import zipfile
 import base64
 import logging
-from typing import Optional, Tuple
+from typing import Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ class ProjectManager:
         
         logger.info(f"ProjectManager initialized with storage: {self.storage_dir}")
     
-    def extract_project(self, zip_data_b64: str) -> Tuple[str, str]:
+    def extract_project(self, zip_data_b64: str) -> tuple[str, str]:
         """解压项目文件
         
         Args:
