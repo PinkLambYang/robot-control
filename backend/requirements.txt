@@ -1,0 +1,8 @@
+# Python 3.8+ 兼容
+fastapi>=0.104.1
+uvicorn>=0.24.0
+pyzmq>=26.0.0
+pyyaml>=6.0.1
+python-socketio>=5.11.0
+
+

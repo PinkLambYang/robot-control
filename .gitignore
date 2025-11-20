@@ -20,7 +20,8 @@ htmlcov/
 .hypothesis/
 
 # Storage and Runtime
-storage/
+storage/logs/*
+storage/projects/current/
 *.log
 
 # Environment variables
