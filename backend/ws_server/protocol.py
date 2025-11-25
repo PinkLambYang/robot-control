@@ -1,6 +1,6 @@
 """WebSocket协议定义和验证"""
 from __future__ import annotations
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 import json
 import logging
 
@@ -12,7 +12,7 @@ class ProtocolError(Exception):
     pass
 
 
-def validate_command(data: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+def validate_command(data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """验证并解析客户端指令
     
     Args:
@@ -42,7 +42,7 @@ def validate_command(data: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
         raise ProtocolError(f"Unknown command: {command}")
 
 
-def validate_update_command(data: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+def validate_update_command(data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """验证UPDATE指令
     
     格式:
@@ -60,7 +60,7 @@ def validate_update_command(data: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
     return 'update', {'zip_data': data['data']}
 
 
-def validate_start_command(data: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+def validate_start_command(data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """验证START指令
     
     格式:
@@ -71,7 +71,7 @@ def validate_start_command(data: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
     return 'start', {}
 
 
-def validate_process_command(data: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+def validate_process_command(data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """验证PROCESS指令
     
     格式:

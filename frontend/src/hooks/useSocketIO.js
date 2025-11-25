@@ -98,7 +98,6 @@ export const useSocketIO = () => {
     try {
       socketRef.current.emit(eventName, data, (response) => {
         if (response) {
-          console.log(response)
           if (callback) {
             callback(response)
           } else {

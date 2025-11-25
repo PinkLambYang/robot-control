@@ -329,12 +329,8 @@ class Worker:
             # 调用函数并直接返回结果（同步响应）
             result = self.python_executor.call_function(obj_name, method_name, args)
             
-            # 返回响应（不需要额外的异步回调，因为 process 本身是同步的）
-            return {
-                'status': 'success',
-                'message': f'{method_name} executed',
-                'data': result
-            }
+            # 直接返回 PythonExecutor 的结果（已经是标准格式）
+            return result
             
         except Exception as e:
             logger.error(f"Process failed: {e}")

@@ -101,10 +101,16 @@ class PythonExecutor:
             else:
                 raise TypeError(f"{obj_name}.{method_name} is not callable")
             
-            return {
-                'status': 'success',
-                'result': result
-            }
+            # 直接返回用户函数的结果（不额外包装）
+            # 如果用户函数返回字典且包含 status，直接返回
+            # 否则包装为标准格式
+            if isinstance(result, dict) and 'status' in result:
+                return result
+            else:
+                return {
+                    'status': 'success',
+                    'result': result
+                }
             
         except Exception as e:
             logger.error(f"Error calling {obj_name}.{method_name}(): {e}")

@@ -340,6 +340,112 @@ body {
     background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%);
 }
 
+/* 游戏手柄方向键样式 */
+.gamepad-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 30px 0;
+}
+
+.dpad {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    display: grid;
+    grid-template-columns: 60px 60px 60px;
+    grid-template-rows: 60px 60px 60px;
+    gap: 0;
+}
+
+.dpad-btn {
+    background: linear-gradient(145deg, #667eea, #764ba2);
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.dpad-btn:hover:not(:disabled) {
+    background: linear-gradient(145deg, #7c96f0, #8b5db8);
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.dpad-btn:active:not(:disabled) {
+    transform: scale(0.95);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+.dpad-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: linear-gradient(145deg, #9ca3af, #6b7280);
+}
+
+.dpad-arrow {
+    font-size: 28px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 上按钮 */
+.dpad-up {
+    grid-column: 2;
+    grid-row: 1;
+    border-radius: 12px 12px 0 0;
+}
+
+/* 左按钮 */
+.dpad-left {
+    grid-column: 1;
+    grid-row: 2;
+    border-radius: 12px 0 0 12px;
+}
+
+/* 右按钮 */
+.dpad-right {
+    grid-column: 3;
+    grid-row: 2;
+    border-radius: 0 12px 12px 0;
+}
+
+/* 下按钮 */
+.dpad-down {
+    grid-column: 2;
+    grid-row: 3;
+    border-radius: 0 0 12px 12px;
+}
+
+/* 中心圆圈装饰 */
+.dpad-center {
+    grid-column: 2;
+    grid-row: 2;
+    background: linear-gradient(145deg, #4a5568, #2d3748);
+    border-radius: 50%;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+    border: 3px solid #1a202c;
+}
+
+/* 添加按压效果动画 */
+@keyframes buttonPress {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(0.95);
+    }
+}
+
+.dpad-btn:active:not(:disabled) .dpad-arrow {
+    animation: buttonPress 0.1s ease;
+}
+
 /* 响应式设计 */
 @media (max-width: 1200px) {
     .content {
@@ -355,6 +461,20 @@ body {
     .log-container {
         height: 400px;
         min-height: 400px;
+    }
+}
+
+/* 移动端手柄样式优化 */
+@media (max-width: 768px) {
+    .dpad {
+        width: 150px;
+        height: 150px;
+        grid-template-columns: 50px 50px 50px;
+        grid-template-rows: 50px 50px 50px;
+    }
+    
+    .dpad-arrow {
+        font-size: 22px;
     }
 }
 

@@ -5,7 +5,7 @@ import shutil
 import zipfile
 import base64
 import logging
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class ProjectManager:
 
         logger.info(f"ProjectManager initialized with storage: {self.storage_dir}")
     
-    def extract_project(self, zip_data_b64: str) -> tuple[str, str]:
+    def extract_project(self, zip_data_b64: str) -> Tuple[str, str]:
         """解压项目文件
 
         Args:
@@ -174,7 +174,10 @@ class ProjectManager:
                 target_path = (extract_to / member).resolve()
 
                 # 再次验证路径（双重保险）
-                if not target_path.is_relative_to(extract_to):
+                # Python 3.8 兼容：使用 relative_to() 替代 is_relative_to()
+                try:
+                    target_path.relative_to(extract_to)
+                except ValueError:
                     raise ValueError(f"路径遍历攻击检测: {member}")
 
                 # 确保目标目录存在
@@ -233,6 +236,7 @@ class ProjectManager:
         # 4. 验证解压后的路径
         try:
             target_path = (extract_to / member).resolve()
+            # Python 3.8 兼容：使用 relative_to() 验证路径
             target_path.relative_to(extract_to)
         except ValueError:
             logger.warning(f"路径遍历检测: {member}")

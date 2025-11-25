@@ -39,16 +39,16 @@ function App() {
             onDisconnect={disconnect}
           />
 
-          <RecognitionPanel
-            isConnected={isConnected}
-            onSendCommand={sendMessage}
-            socket={socket}
-            addLog={addLog}
-          />
-
           <CommandPanel
             isConnected={isConnected}
             onSendCommand={sendMessage}
+            addLog={addLog}
+          />
+
+<RecognitionPanel
+            isConnected={isConnected}
+            onSendCommand={sendMessage}
+            socket={socket}
             addLog={addLog}
           />
 

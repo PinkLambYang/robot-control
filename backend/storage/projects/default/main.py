@@ -25,6 +25,160 @@ class RobotController:
         self.recognition_thread = None
         self.recognition_running = False
         self._lock = threading.Lock()  # 线程锁，保护共享状态
+        
+        # DDS Client 管理
+        self.dds_process = None
+        self.dds_running = False
+        self.dds_path = "/home/noetix/work/dds_client_release/dds_bridge"
+    
+    def start_dds_client(self) -> Dict[str, Any]:
+        """启动 DDS Client
+        
+        Returns:
+            执行结果
+        """
+        try:
+            # 检查是否已经在运行
+            if self.dds_running and self.dds_process and self.dds_process.poll() is None:
+                return {
+                    "status": "warning",
+                    "message": "DDS Client 已经在运行",
+                    "pid": self.dds_process.pid
+                }
+            
+            # 检查系统中是否有其他 dds_bridge 进程
+            check_result = subprocess.run(
+                ['pgrep', '-f', 'dds_bridge'],
+                capture_output=True
+            )
+            
+            if check_result.returncode == 0:
+                self.dds_running = True
+                pid = check_result.stdout.decode().strip()
+                return {
+                    "status": "success",
+                    "message": "DDS Client 已在系统中运行",
+                    "pid": pid
+                }
+            
+            # 检查文件是否存在
+            import os
+            if not os.path.exists(self.dds_path):
+                return {
+                    "status": "error",
+                    "message": f"DDS Bridge 文件不存在: {self.dds_path}"
+                }
+            
+            # 启动 DDS bridge
+            logger.info(f"Starting DDS bridge: {self.dds_path}")
+            self.dds_process = subprocess.Popen(
+                ['sudo', self.dds_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # 等待启动
+            time.sleep(1)
+            
+            # 检查是否成功启动
+            if self.dds_process.poll() is not None:
+                stderr = self.dds_process.stderr.read().decode()
+                return {
+                    "status": "error",
+                    "message": "DDS Client 启动失败",
+                    "error": stderr
+                }
+            
+            self.dds_running = True
+            logger.info(f"DDS bridge started (PID: {self.dds_process.pid})")
+            
+            return {
+                "status": "success",
+                "message": "DDS Client 启动成功",
+                "pid": self.dds_process.pid
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to start DDS client: {e}")
+            return {
+                "status": "error",
+                "message": f"启动 DDS Client 失败: {str(e)}"
+            }
+    
+    def stop_dds_client(self) -> Dict[str, Any]:
+        """停止 DDS Client
+        
+        Returns:
+            执行结果
+        """
+        try:
+            # 先尝试用 SIGTERM 优雅停止
+            try:
+                result = subprocess.run(
+                    ['sudo', 'pkill', '-f', 'dds_bridge'],
+                    capture_output=True,
+                    timeout=5
+                )
+                logger.info(f"sudo pkill (SIGTERM) result: return code {result.returncode}")
+            except subprocess.TimeoutExpired:
+                logger.warning("sudo pkill timeout")
+            except Exception as e:
+                logger.error(f"sudo pkill failed: {e}")
+            
+            # 等待一下让进程有时间退出
+            time.sleep(0.5)
+            
+            # 再用 SIGKILL 强制终止所有残留进程
+            try:
+                result = subprocess.run(
+                    ['sudo', 'pkill', '-9', '-f', 'dds_bridge'],
+                    capture_output=True,
+                    timeout=5
+                )
+                logger.info(f"sudo pkill -9 (SIGKILL) result: return code {result.returncode}")
+            except subprocess.TimeoutExpired:
+                logger.warning("sudo pkill -9 timeout")
+            except Exception as e:
+                logger.error(f"sudo pkill -9 failed: {e}")
+            
+            # 清理本地进程对象
+            if self.dds_process:
+                try:
+                    if self.dds_process.poll() is None:
+                        self.dds_process.terminate()
+                        self.dds_process.wait(timeout=1)
+                except:
+                    pass
+                self.dds_process = None
+            
+            self.dds_running = False
+            logger.info("DDS bridge stopped")
+            
+            return {
+                "status": "success",
+                "message": "DDS Client 已停止"
+            }
+                
+        except Exception as e:
+            logger.error(f"Failed to stop DDS client: {e}")
+            self.dds_running = False  # 强制标记为已停止
+            return {
+                "status": "success",
+                "message": "DDS Client 已停止"
+            }
+    
+    def _check_dds_required(self) -> Dict[str, Any]:
+        """检查 DDS 是否已启动（内部方法）
+        
+        Returns:
+            如果 DDS 未启动，返回错误信息；否则返回 None
+        """
+        if not self.dds_running:
+            return {
+                "status": "error",
+                "message": "请先启动 DDS Client 才能执行此操作"
+            }
+        return None
     
     def prepare_mode(self) -> Dict[str, Any]:
         """准备模式
@@ -32,6 +186,11 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
             ["bash", "-lc", 'printf "move x=0 yaw=0 action=7 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
@@ -50,6 +209,11 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
             ["bash", "-lc", 'printf "move x=0 yaw=0 action=0 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
@@ -68,6 +232,11 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
             ["bash", "-lc", 'printf "move x=0 yaw=0 action=4 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
@@ -86,6 +255,11 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
             ["bash", "-lc", 'printf "move x=0 yaw=0 action=1 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
@@ -103,6 +277,11 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
             ["bash", "-lc", 'printf "move x=0 yaw=0 action=2 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
@@ -120,6 +299,11 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
             ["bash", "-lc", 'printf "move x=0 yaw=0 action=3 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
@@ -137,6 +321,11 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
             ["bash", "-lc", 'printf "move x=1 yaw=0 action=0 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
@@ -160,6 +349,11 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
             ["bash", "-lc", 'printf "move x=-1 yaw=0 action=0 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
@@ -183,8 +377,13 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
-            ["bash", "-lc", 'printf "move x=0 yaw=-1 action=0 index=0\n" | nc -q 0 127.0.0.1 5566'],
+            ["bash", "-lc", 'printf "move x=0 yaw=1 action=0 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
             stderr=subprocess.DEVNULL
         )
@@ -206,8 +405,13 @@ class RobotController:
         Returns:
             执行结果
         """
+        # 检查 DDS 是否启动
+        dds_check = self._check_dds_required()
+        if dds_check:
+            return dds_check
+        
         p = subprocess.Popen(
-            ["bash", "-lc", 'printf "move x=0 yaw=1 action=0 index=0\n" | nc -q 0 127.0.0.1 5566'],
+            ["bash", "-lc", 'printf "move x=0 yaw=-1 action=0 index=0\n" | nc -q 0 127.0.0.1 5566'],
             stdout=subprocess.DEVNULL,   # 不关心输出就丢掉
             stderr=subprocess.DEVNULL
         )
@@ -233,6 +437,7 @@ class RobotController:
             "status": "success",
             "current_mode": self.current_mode,
             "recognition_running": self.recognition_running,
+            "dds_running": self.dds_running,
             "message": f"当前模式: {self.current_mode}"
         }
     
@@ -293,11 +498,16 @@ class RobotController:
         }
     
     def stop(self):
-        """WebSocket 断开时自动调用，停止后台线程"""
-        logger.info("Stopping background threads...")
+        """WebSocket 断开时自动调用，停止后台线程和 DDS"""
+        logger.info("Stopping background threads and DDS...")
         try:
+            # 停止识别线程
             if self.recognition_running:
                 self.stop_recognition()
+            
+            # 停止 DDS client
+            if self.dds_running:
+                self.stop_dds_client()
         except Exception as e:
             logger.error(f"Error stopping threads: {e}")
     
