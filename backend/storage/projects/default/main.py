@@ -24,6 +24,7 @@ class RobotController:
         self.current_mode = "idle"
         self.recognition_thread = None
         self.recognition_running = False
+        self._lock = threading.Lock()  # 线程锁，保护共享状态
     
     def prepare_mode(self) -> Dict[str, Any]:
         """准备模式
@@ -237,23 +238,24 @@ class RobotController:
     
     def start_recognition(self) -> Dict[str, Any]:
         """开始识别
-        
+
         启动一个后台线程，模拟持续的识别过程，实时推送识别结果到前端
-        
+
         Returns:
             执行结果
         """
-        if self.recognition_running:
-            return {
-                "status": "error",
-                "message": "识别已经在运行中"
-            }
-        
-        # 启动识别线程
-        self.recognition_running = True
-        self.recognition_thread = threading.Thread(target=self._recognition_worker, daemon=True)
-        self.recognition_thread.start()
-        
+        with self._lock:
+            if self.recognition_running:
+                return {
+                    "status": "error",
+                    "message": "识别已经在运行中"
+                }
+
+            # 启动识别线程
+            self.recognition_running = True
+            self.recognition_thread = threading.Thread(target=self._recognition_worker, daemon=True)
+            self.recognition_thread.start()
+
         return {
             "status": "success",
             "message": "识别已启动"
@@ -261,30 +263,43 @@ class RobotController:
     
     def stop_recognition(self) -> Dict[str, Any]:
         """结束识别
-        
+
         停止识别线程
-        
+
         Returns:
             执行结果
         """
-        if not self.recognition_running:
-            return {
-                "status": "error",
-                "message": "识别未在运行"
-            }
-        
-        # 停止识别
-        self.recognition_running = False
-        
-        # 等待线程结束
-        if self.recognition_thread:
-            self.recognition_thread.join(timeout=2)
+        with self._lock:
+            if not self.recognition_running:
+                return {
+                    "status": "error",
+                    "message": "识别未在运行"
+                }
+
+            # 停止识别
+            self.recognition_running = False
+            thread_to_join = self.recognition_thread
+
+        # 在锁外等待线程结束，避免死锁
+        if thread_to_join:
+            thread_to_join.join(timeout=2)
+
+        with self._lock:
             self.recognition_thread = None
-        
+
         return {
             "status": "success",
             "message": "识别已停止"
         }
+    
+    def stop(self):
+        """WebSocket 断开时自动调用，停止后台线程"""
+        logger.info("Stopping background threads...")
+        try:
+            if self.recognition_running:
+                self.stop_recognition()
+        except Exception as e:
+            logger.error(f"Error stopping threads: {e}")
     
     def _recognition_worker(self):
         """识别工作线程
@@ -328,4 +343,3 @@ class RobotController:
 
 # 创建全局实例
 robot_controller = RobotController()
-

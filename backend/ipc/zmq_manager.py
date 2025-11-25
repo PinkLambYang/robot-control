@@ -36,50 +36,65 @@ class ZMQManager:
         else:
             raise ValueError(f"Invalid role: {role}")
         
-        logger.info(f"ZMQManager initialized with role: {role}")
+        logger.info(f"ZMQManager initialized (role={role})")
     
     def _init_server_sockets(self):
         """初始化WS Server的socket"""
         # REQ socket用于发送指令
         self.req_socket = self.context.socket(zmq.REQ)
         self.req_socket.connect(self.command_socket_addr)
-        logger.info(f"REQ socket connected to {self.command_socket_addr}")
+        logger.debug(f"REQ socket connected to {self.command_socket_addr}")
         
         # SUB socket用于接收回调
         self.sub_socket = self.context.socket(zmq.SUB)
         self.sub_socket.connect(self.callback_socket_addr)
         self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
-        logger.info(f"SUB socket connected to {self.callback_socket_addr}")
+        logger.debug(f"SUB socket connected to {self.callback_socket_addr}")
     
     def _init_worker_sockets(self):
         """初始化Worker的socket"""
         # REP socket用于接收指令
         self.rep_socket = self.context.socket(zmq.REP)
         self.rep_socket.bind(self.command_socket_addr)
-        logger.info(f"REP socket bound to {self.command_socket_addr}")
+        logger.debug(f"REP socket bound to {self.command_socket_addr}")
         
         # PUB socket用于发布回调
         self.pub_socket = self.context.socket(zmq.PUB)
         self.pub_socket.bind(self.callback_socket_addr)
-        logger.info(f"PUB socket bound to {self.callback_socket_addr}")
+        logger.debug(f"PUB socket bound to {self.callback_socket_addr}")
     
-    def send_command(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+    def send_command(self, msg: Dict[str, Any], timeout: Optional[int] = None) -> Dict[str, Any]:
         """WS Server发送指令到Worker
         
         Args:
             msg: 指令消息字典
+            timeout: 可选的接收超时时间（毫秒），None表示阻塞等待
             
         Returns:
             Worker的响应消息
+            
+        Raises:
+            TimeoutError: 如果设置了timeout且接收超时
         """
         if self.role != 'server':
             raise RuntimeError("Only server can send commands")
         
         logger.debug(f"Sending command: {msg}")
         self.req_socket.send_json(msg)
-        response = self.req_socket.recv_json()
-        logger.debug(f"Received response: {response}")
-        return response
+        
+        # 如果指定了超时，使用poll检查
+        if timeout is not None:
+            if self.req_socket.poll(timeout):
+                response = self.req_socket.recv_json()
+                logger.debug(f"Received response: {response}")
+                return response
+            else:
+                logger.warning(f"Command timeout after {timeout}ms: {msg.get('type')}")
+                raise TimeoutError(f"No response received within {timeout}ms")
+        else:
+            response = self.req_socket.recv_json()
+            logger.debug(f"Received response: {response}")
+            return response
     
     def receive_command(self) -> Dict[str, Any]:
         """Worker接收来自WS Server的指令
@@ -136,14 +151,47 @@ class ZMQManager:
             return msg
         return None
     
-    def close(self):
-        """关闭所有socket"""
-        logger.info("Closing ZMQ sockets")
-        if self.role == 'server':
-            self.req_socket.close()
-            self.sub_socket.close()
+    def close(self) -> None:
+        """关闭所有socket和context"""
+        logger.debug("Closing ZMQ sockets")
+        errors = []
+
+        # 尝试关闭所有socket，收集错误但不中断
+        try:
+            if self.role == 'server':
+                if hasattr(self, 'req_socket'):
+                    try:
+                        self.req_socket.close()
+                    except Exception as e:
+                        errors.append(f"req_socket: {e}")
+
+                if hasattr(self, 'sub_socket'):
+                    try:
+                        self.sub_socket.close()
+                    except Exception as e:
+                        errors.append(f"sub_socket: {e}")
+            else:
+                if hasattr(self, 'rep_socket'):
+                    try:
+                        self.rep_socket.close()
+                    except Exception as e:
+                        errors.append(f"rep_socket: {e}")
+
+                if hasattr(self, 'pub_socket'):
+                    try:
+                        self.pub_socket.close()
+                    except Exception as e:
+                        errors.append(f"pub_socket: {e}")
+        finally:
+            # 无论socket关闭是否成功，都尝试终止context
+            try:
+                self.context.term()
+            except Exception as e:
+                errors.append(f"context: {e}")
+
+        # 记录所有错误
+        if errors:
+            logger.error(f"Errors during ZMQ cleanup: {'; '.join(errors)}")
         else:
-            self.rep_socket.close()
-            self.pub_socket.close()
-        self.context.term()
+            logger.debug("ZMQ sockets closed successfully")
 

@@ -1,9 +1,50 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+
+// 样式常量
+const STYLES = {
+  statusBox: (isActive) => ({
+    padding: '12px',
+    borderRadius: '6px',
+    backgroundColor: isActive ? '#e8f5e9' : '#f5f5f5',
+    border: `2px solid ${isActive ? '#4caf50' : '#ddd'}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  }),
+  latestResultCard: {
+    padding: '15px',
+    borderRadius: '8px',
+    backgroundColor: '#e3f2fd',
+    border: '2px solid #2196f3',
+    animation: 'fadeIn 0.3s ease-in'
+  },
+  emptyState: {
+    padding: '30px',
+    textAlign: 'center',
+    color: '#999',
+    fontSize: '14px',
+    border: '2px dashed #ddd',
+    borderRadius: '8px',
+    backgroundColor: '#fafafa'
+  }
+}
 
 export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog }) => {
   const [isRecognizing, setIsRecognizing] = useState(false)
-  const [recognitionResults, setRecognitionResults] = useState([])
   const [latestResult, setLatestResult] = useState(null)
+  const [recognitionCount, setRecognitionCount] = useState(0)
+  
+  // 使用 ref 避免 useEffect 重复订阅
+  const isRecognizingRef = useRef(isRecognizing)
+  const addLogRef = useRef(addLog)
+  const onSendCommandRef = useRef(onSendCommand)
+  
+  // 同步 ref
+  useEffect(() => {
+    isRecognizingRef.current = isRecognizing
+    addLogRef.current = addLog
+    onSendCommandRef.current = onSendCommand
+  }, [isRecognizing, addLog, onSendCommand])
 
   useEffect(() => {
     if (!socket) return
@@ -20,17 +61,53 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
       }
       
       setLatestResult(result)
-      setRecognitionResults(prev => [result, ...prev].slice(0, 50)) // 只保留最近50条
+      setRecognitionCount(data.count)
+    }
+
+    // 监听断开连接事件 - 重置识别状态
+    const handleDisconnect = () => {
+      if (isRecognizingRef.current) {
+        setIsRecognizing(false)
+        addLogRef.current('⚠ 连接断开，识别已自动停止', 'warning')
+      }
+    }
+
+    // 监听重新连接事件 - 同步状态
+    const handleConnect = () => {
+      // 只在之前正在识别时才查询状态
+      if (isRecognizingRef.current) {
+        const data = {
+          params: {
+            object: 'robot_controller',
+            method: 'get_status',
+            args: {}
+          }
+        }
+
+        onSendCommandRef.current('process', data, (response) => {
+          if (response.status === 'success' && response.data?.result) {
+            const backendRecognitionRunning = response.data.result.recognition_running
+            if (!backendRecognitionRunning) {
+              setIsRecognizing(false)
+              addLogRef.current('✓ 状态已同步：识别已停止', 'info')
+            }
+          }
+        })
+      }
     }
 
     socket.on('recognition_result', handleRecognitionResult)
+    socket.on('disconnect', handleDisconnect)
+    socket.on('connect', handleConnect)
 
     return () => {
       socket.off('recognition_result', handleRecognitionResult)
+      socket.off('disconnect', handleDisconnect)
+      socket.off('connect', handleConnect)
     }
   }, [socket])
 
-  const handleStartRecognition = () => {
+  const handleStartRecognition = useCallback(() => {
     const data = {
       params: {
         object: 'robot_controller',
@@ -40,18 +117,18 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
     }
 
     onSendCommand('process', data, (response) => {
-      if (response.status === 'success') {
+      if (response.status === 'success' && response.data?.status === 'success') {
         setIsRecognizing(true)
-        setRecognitionResults([])
         setLatestResult(null)
-        addLog(`✓ ${response.message}`, 'success')
+        setRecognitionCount(0)
+        addLog(`回调结果: ${response.message}`, 'success')
       } else {
-        addLog(`✗ ${response.message}`, 'error')
+        addLog(`✗ ${response.status === 'error' ? response.message : response.data?.status === 'error' ? response.data?.message : 'Unknown error'}`, 'error')
       }
     })
-  }
+  }, [onSendCommand, addLog])
 
-  const handleStopRecognition = () => {
+  const handleStopRecognition = useCallback(() => {
     const data = {
       params: {
         object: 'robot_controller',
@@ -61,20 +138,15 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
     }
 
     onSendCommand('process', data, (response) => {
-      if (response.status === 'success') {
+      if (response.status === 'success' && response.data?.status === 'success') {
         setIsRecognizing(false)
-        addLog(`✓ ${response.message}`, 'warning')
+        addLog(`✓ ${response.message}`, 'info')
       } else {
-        addLog(`✗ ${response.message}`, 'error')
+        addLog(`✗ ${response.status === 'error' ? response.message : response.data?.status === 'error' ? response.data?.message : 'Unknown error'}`, 'error')
       }
     })
-  }
+  }, [onSendCommand, addLog])
 
-  const handleClearResults = () => {
-    setRecognitionResults([])
-    setLatestResult(null)
-    addLog('识别结果已清空', 'info')
-  }
 
   return (
     <div className="section">
@@ -90,26 +162,11 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
         >
           {isRecognizing ? '⏹ 停止识别' : '▶️ 开始识别'}
         </button>
-        <button
-          className="btn btn-secondary"
-          onClick={handleClearResults}
-          disabled={!isConnected || recognitionResults.length === 0}
-        >
-          清空结果
-        </button>
       </div>
 
       {/* 识别状态 */}
       <div style={{ marginBottom: '15px' }}>
-        <div style={{
-          padding: '12px',
-          borderRadius: '6px',
-          backgroundColor: isRecognizing ? '#e8f5e9' : '#f5f5f5',
-          border: `2px solid ${isRecognizing ? '#4caf50' : '#ddd'}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
+        <div style={STYLES.statusBox(isRecognizing)}>
           <div>
             <span style={{ 
               fontSize: '14px', 
@@ -118,9 +175,9 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
             }}>
               {isRecognizing ? '● 识别中...' : '○ 未启动'}
             </span>
-            {recognitionResults.length > 0 && (
+            {recognitionCount > 0 && (
               <span style={{ fontSize: '13px', color: '#666', marginLeft: '10px' }}>
-                已识别 {recognitionResults.length} 次
+                已识别 {recognitionCount} 次
               </span>
             )}
           </div>
@@ -133,13 +190,7 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
           <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px', fontWeight: 'bold' }}>
             最新识别结果：
           </div>
-          <div style={{
-            padding: '15px',
-            borderRadius: '8px',
-            backgroundColor: '#e3f2fd',
-            border: '2px solid #2196f3',
-            animation: 'fadeIn 0.3s ease-in'
-          }}>
+          <div style={STYLES.latestResultCard}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div>
                 <div style={{ fontSize: '12px', color: '#666' }}>对象</div>
@@ -170,66 +221,9 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
         </div>
       )}
 
-      {/* 识别历史记录 */}
-      {recognitionResults.length > 0 && (
-        <div>
-          <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px', fontWeight: 'bold' }}>
-            识别历史 (最近 {Math.min(recognitionResults.length, 10)} 条)：
-          </div>
-          <div style={{
-            maxHeight: '300px',
-            overflowY: 'auto',
-            border: '1px solid #ddd',
-            borderRadius: '6px',
-            backgroundColor: '#fafafa'
-          }}>
-            {recognitionResults.slice(0, 10).map((result) => (
-              <div
-                key={result.id}
-                style={{
-                  padding: '10px',
-                  borderBottom: '1px solid #eee',
-                  fontSize: '13px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 'bold', color: '#1976d2' }}>#{result.count}</span>
-                  <span style={{ marginLeft: '10px', color: '#333' }}>{result.object}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <span style={{ 
-                    color: result.confidence >= 0.9 ? '#4caf50' : result.confidence >= 0.8 ? '#ff9800' : '#f44336',
-                    fontWeight: 'bold'
-                  }}>
-                    {(result.confidence * 100).toFixed(0)}%
-                  </span>
-                  <span style={{ color: '#999', fontSize: '12px' }}>
-                    {result.timestamp}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* 空状态提示 */}
-      {!isRecognizing && recognitionResults.length === 0 && (
-        <div style={{
-          padding: '30px',
-          textAlign: 'center',
-          color: '#999',
-          fontSize: '14px',
-          border: '2px dashed #ddd',
-          borderRadius: '8px',
-          backgroundColor: '#fafafa'
-        }}>
+      {!isRecognizing && !latestResult && (
+        <div style={STYLES.emptyState}>
           <div style={{ fontSize: '48px', marginBottom: '10px' }}>🔍</div>
           <div>点击"开始识别"按钮启动实时识别</div>
         </div>

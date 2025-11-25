@@ -88,9 +88,25 @@ class SocketIOServer:
                     pass
                 del self.callback_tasks[sid]
             
-            # 只有断开的客户端是当前活跃客户端时，才清除连接状态
+            # 只有断开的客户端是当前活跃客户端时，才清除连接状态并通知 Worker
             if self.conn_mgr.get_current_sid() == sid:
                 self.conn_mgr.disconnect()
+                
+                # 通知 Worker 停止用户线程（不清理缓存）
+                try:
+                    logger.debug(f"Notifying worker about disconnect [{sid}]")
+                    disconnect_msg = {
+                        'type': 'client_disconnected',
+                        'data': {'sid': sid}
+                    }
+                    # 在后台线程中发送（避免阻塞异步事件循环）
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, 
+                        lambda: self.zmq.send_command(disconnect_msg, timeout=1000)
+                    )
+                    logger.debug("Worker notified successfully")
+                except Exception as e:
+                    logger.warning(f"Failed to notify worker about disconnect: {e}")
         
         @self.sio.event
         async def update(sid, data):

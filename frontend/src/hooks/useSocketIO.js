@@ -99,27 +99,14 @@ export const useSocketIO = () => {
       socketRef.current.emit(eventName, data, (response) => {
         if (response) {
           console.log(response)
-          // 只在有 callback 时，由 callback 负责记录日志
-          // 没有 callback 时，才自动记录响应日志
           if (callback) {
             callback(response)
           } else {
-            // 没有 callback 时，自动记录响应
-            if (response.status === 'success') {
-              addLog(`✓ ${response.message}`, 'success')
-              if (response.data) {
-                if ('status' in response.data) {
-                  addLog(`数据: ${JSON.stringify(response.data)}`, response.data.status)
-                } else {
-                  addLog(`数据: ${JSON.stringify(response.data)}`, 'info')
-                }
-              }
-            } else if (response.status === 'error') {
-              addLog(`✗ 错误: ${response.message}`, 'error')
-              if (response.data) {
-                addLog(`错误详情: ${JSON.stringify(response.data)}`, 'error')
-              }
-            }
+            if (response.status === 'success' && response.data && 'status' in response.data) {
+                addLog(`回调结果: ${JSON.stringify(response.data)}`, response.data.status)
+                return
+              } 
+            addLog(`回调结果: ${response.message}`, response.status)
           }
         }
       })

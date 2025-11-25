@@ -15,7 +15,7 @@ class PythonExecutor:
     
     def __init__(self, project_path: str, push_callback=None):
         """初始化Python执行器
-        
+
         Args:
             project_path: Python项目路径
             push_callback: 可选的推送回调函数，用于主动向前端推送消息
@@ -25,10 +25,14 @@ class PythonExecutor:
         self.context: Dict[str, Any] = {}  # 存储已创建的对象实例
         self.original_sys_path = sys.path.copy()
         self.push_callback = push_callback
+        self.loaded_modules = set()  # 记录加载前的模块列表
     
     def load(self):
         """加载Python模块"""
         try:
+            # 记录加载前的模块列表
+            self.loaded_modules = set(sys.modules.keys())
+
             # 将项目路径添加到sys.path
             if str(self.project_path) not in sys.path:
                 sys.path.insert(0, str(self.project_path))
@@ -191,7 +195,6 @@ class PythonExecutor:
             if self.push_callback:
                 try:
                     self.push_callback(event, data)
-                    logger.info(f"Pushed message: {event}")
                 except Exception as e:
                     logger.error(f"Failed to push message: {e}", exc_info=True)
             else:
@@ -200,14 +203,77 @@ class PythonExecutor:
         # 注入到模块的全局命名空间
         if self.module:
             setattr(self.module, 'push_message', push_message)
+            logger.debug("Injected push_message function into module")
+    
+    def stop_threads(self):
+        """停止用户代码中运行的线程（不清理缓存）
+        
+        调用用户代码的约定 stop() 方法：
+        1. 模块级别的 stop() 函数
+        2. context 中每个对象的 stop() 方法
+        """
+        logger.info("Stopping user threads...")
+        stopped_count = 0
+        
+        try:
+            # 1. 尝试调用模块级别的 stop() 函数
+            if self.module and hasattr(self.module, 'stop'):
+                try:
+                    logger.debug("Calling module.stop()")
+                    self.module.stop()
+                    stopped_count += 1
+                except Exception as e:
+                    logger.warning(f"Module stop() failed: {e}")
+            
+            # 2. 遍历 context 中的对象，调用它们的 stop() 方法
+            for obj_name, obj in self.context.items():
+                try:
+                    if hasattr(obj, 'stop') and callable(getattr(obj, 'stop')):
+                        logger.debug(f"Calling {obj_name}.stop()")
+                        obj.stop()
+                        stopped_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to stop {obj_name}: {e}")
+            
+            logger.info(f"Thread stop completed (called {stopped_count} stop method(s))")
+            
+        except Exception as e:
+            logger.error(f"Error stopping threads: {e}", exc_info=True)
     
     def cleanup(self):
         """清理资源"""
-        # 清理context中的对象
+        logger.debug("Starting Python executor cleanup")
+
+        # 1. 清理注入的函数
+        if self.module and hasattr(self.module, 'push_message'):
+            try:
+                delattr(self.module, 'push_message')
+                logger.debug("Removed injected push_message function")
+            except Exception as e:
+                logger.warning(f"Failed to remove push_message: {e}")
+
+        # 2. 清理context中的对象
         self.context.clear()
-        
-        # 恢复sys.path（注意：无法完全卸载已导入的模块）
+
+        # 3. 清理 sys.modules 中新加载的模块
+        if self.loaded_modules:
+            current_modules = set(sys.modules.keys())
+            new_modules = current_modules - self.loaded_modules
+
+            for mod_name in new_modules:
+                # 只删除项目相关的模块（main 及其子模块）
+                if mod_name == 'main' or mod_name.startswith('main.'):
+                    logger.debug(f"Removing module from sys.modules: {mod_name}")
+                    try:
+                        sys.modules.pop(mod_name, None)
+                    except Exception as e:
+                        logger.warning(f"Failed to remove module {mod_name}: {e}")
+
+        # 4. 恢复sys.path
         sys.path = self.original_sys_path.copy()
-        
+
+        # 5. 清理模块引用
         self.module = None
+
+        logger.debug("Python executor cleanup completed")
 

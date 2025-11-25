@@ -10,6 +10,7 @@
 - 🔐 **单客户端限制** - 同一时刻只允许一个客户端连接，避免冲突
 - 🐍 **Python 项目支持** - 动态导入模块，实时函数调用
 - 🔄 **自动重启** - UPDATE 后自动重启 Worker 清理模块缓存
+- 🧹 **智能线程清理** - WebSocket 断开时自动停止用户线程，保留缓存快速重连
 - 📦 **项目管理** - ZIP 包上传、解压、类型识别
 
 ## 📋 系统要求
@@ -303,6 +304,68 @@ socket.on('task_completed', (data) => {
 cd my_robot_project
 zip -r my_robot_project.zip .
 ```
+
+## 🧹 WebSocket 断开时的线程清理
+
+当 WebSocket 客户端断开连接时，系统会自动停止用户代码中运行的后台线程，但**保留已加载的模块和上下文**，使得重连后可以立即使用。
+
+### 约定接口
+
+用户代码实现 `stop()` 方法即可，支持两种方式：
+
+**方式1: 对象级 `stop()` 方法**（推荐）
+
+```python
+# main.py
+
+class RobotController:
+    def start_recognition(self):
+        """启动后台识别任务"""
+        self.recognition_running = True
+        self.thread = threading.Thread(target=self._worker, daemon=True)
+        self.thread.start()
+    
+    def stop(self):
+        """WebSocket 断开时自动调用"""
+        if self.recognition_running:
+            self.stop_recognition()
+    
+    def stop_recognition(self):
+        """停止识别任务"""
+        self.recognition_running = False
+        if self.thread:
+            self.thread.join(timeout=2)
+
+robot_controller = RobotController()
+```
+
+**方式2: 模块级 `stop()` 函数**
+
+```python
+# main.py
+
+class RobotController:
+    # ... 同上 ...
+
+robot_controller = RobotController()
+
+def stop():
+    """WebSocket 断开时自动调用"""
+    if robot_controller.recognition_running:
+        robot_controller.stop_recognition()
+```
+
+框架会自动调用：
+1. Context 中对象的 `stop()` 方法
+2. 或模块级的 `stop()` 函数
+
+### 优势
+
+| 特性 | 线程清理模式 | 完全重启模式 |
+|------|------------|------------|
+| 重连速度 | ~0.1s ⚡️ | ~1s |
+| 状态保留 | ✓ | ✗ |
+| 后台线程 | 自动停止 ✓ | 自动停止 ✓ |
 
 ## 🚀 默认项目功能
 

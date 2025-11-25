@@ -150,6 +150,8 @@ class Worker:
                 return self._handle_start(data)
             elif cmd_type == 'process':
                 return self._handle_process(data)
+            elif cmd_type == 'client_disconnected':
+                return self._handle_client_disconnect(data)
             else:
                 return {
                     'status': 'error',
@@ -336,6 +338,34 @@ class Worker:
             
         except Exception as e:
             logger.error(f"Process failed: {e}")
+            return {
+                'status': 'error',
+                'message': str(e)
+            }
+    
+    def _handle_client_disconnect(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """处理客户端断开：停止用户线程（不清理缓存）
+        
+        Args:
+            data: {'sid': str}
+            
+        Returns:
+            响应消息
+        """
+        try:
+            sid = data.get('sid', 'unknown')
+            logger.info(f"Client disconnected [{sid}], stopping user threads...")
+            
+            # 只停止线程，不清理执行器的其他状态
+            if self.python_executor:
+                self.python_executor.stop_threads()
+            
+            return {
+                'status': 'success',
+                'message': 'User threads stopped successfully'
+            }
+        except Exception as e:
+            logger.error(f"Failed to stop threads on disconnect: {e}", exc_info=True)
             return {
                 'status': 'error',
                 'message': str(e)
