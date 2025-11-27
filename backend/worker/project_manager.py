@@ -8,7 +8,22 @@ import logging
 from typing import Optional, List, Tuple
 from pathlib import Path
 
+from utils.error_codes import ErrorCode
+
 logger = logging.getLogger(__name__)
+
+
+class ProjectError(Exception):
+    """项目管理错误基类
+    
+    Attributes:
+        error_code: 错误码
+        message: 错误消息
+    """
+    def __init__(self, error_code: ErrorCode, message: str):
+        self.error_code = error_code
+        self.message = message
+        super().__init__(message)
 
 
 class ProjectManager:
@@ -17,7 +32,7 @@ class ProjectManager:
     # 安全配置
     MAX_ZIP_SIZE = 20 * 1024 * 1024  # 20MB
     MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # 100MB
-    MAX_FILES = 20  # 最多 20 个文件
+    MAX_FILES = 10  # 最多 10 个文件
 
     # 允许的文件扩展名白名单
     ALLOWED_EXTENSIONS = {'.py', '.txt', '.md', '.json', '.yaml', '.yml', '.ini', '.cfg', '.toml'}
@@ -56,7 +71,8 @@ class ProjectManager:
 
             # 1. 检查 ZIP 文件大小
             if len(zip_data) > self.MAX_ZIP_SIZE:
-                raise ValueError(
+                raise ProjectError(
+                    ErrorCode.PROJECT_INVALID_FORMAT,
                     f"ZIP 文件过大: {len(zip_data)} 字节 "
                     f"(最大允许: {self.MAX_ZIP_SIZE} 字节)"
                 )
@@ -87,12 +103,16 @@ class ProjectManager:
 
             return str(self.current_project_dir), project_type
 
-        except ValueError:
-            # 安全检查失败，直接抛出
+        except ProjectError:
+            # 项目错误（包含错误码），直接抛出
             raise
         except Exception as e:
             logger.error(f"Failed to extract project: {e}", exc_info=True)
-            raise
+            # 其他未知错误，包装为项目上传失败
+            raise ProjectError(
+                ErrorCode.PROJECT_UPLOAD_FAILED,
+                f"项目上传失败: {str(e)}"
+            )
     
     def detect_project_type(self, project_path: str) -> str:
         """公开的项目类型检测方法"""
@@ -115,7 +135,8 @@ class ProjectManager:
             # 1. 检查文件数量
             file_count = len(zip_ref.namelist())
             if file_count > self.MAX_FILES:
-                raise ValueError(
+                raise ProjectError(
+                    ErrorCode.PROJECT_INVALID_FORMAT,
                     f"ZIP 文件数量过多: {file_count} 个文件 "
                     f"(最大允许: {self.MAX_FILES} 个)"
                 )
@@ -123,7 +144,8 @@ class ProjectManager:
             # 2. 检查解压后总大小（防止 Zip 炸弹）
             total_size = sum(info.file_size for info in zip_ref.infolist())
             if total_size > self.MAX_UNCOMPRESSED_SIZE:
-                raise ValueError(
+                raise ProjectError(
+                    ErrorCode.PROJECT_INVALID_FORMAT,
                     f"解压后大小过大: {total_size} 字节 "
                     f"(最大允许: {self.MAX_UNCOMPRESSED_SIZE} 字节)"
                 )
@@ -156,7 +178,8 @@ class ProjectManager:
 
             # 4. 如果有错误，抛出异常
             if errors:
-                raise ValueError(
+                raise ProjectError(
+                    ErrorCode.PROJECT_SECURITY_VIOLATION,
                     f"发现 {len(errors)} 个安全问题:\n" +
                     "\n".join(f"  - {err}" for err in errors)
                 )
@@ -178,7 +201,10 @@ class ProjectManager:
                 try:
                     target_path.relative_to(extract_to)
                 except ValueError:
-                    raise ValueError(f"路径遍历攻击检测: {member}")
+                    raise ProjectError(
+                        ErrorCode.PROJECT_SECURITY_VIOLATION,
+                        f"路径遍历攻击检测: {member}"
+                    )
 
                 # 确保目标目录存在
                 target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -266,7 +292,10 @@ class ProjectManager:
             logger.info("Python files found")
             return 'python'
         else:
-            raise ValueError("Cannot detect project type: no Python files found. Only Python projects are supported.")
+            raise ProjectError(
+                ErrorCode.PROJECT_INVALID_FORMAT,
+                "无法识别项目类型: 未找到 Python 文件。仅支持 Python 项目。"
+            )
     
     def get_current_project_path(self) -> Optional[str]:
         """获取当前项目路径

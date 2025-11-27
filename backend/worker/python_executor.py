@@ -7,6 +7,8 @@ import logging
 from typing import Dict, Any, Optional
 from pathlib import Path
 
+from utils.error_codes import ErrorCode, create_error_response, create_success_response
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +42,7 @@ class PythonExecutor:
             # 查找入口文件
             entry_file = self._find_entry_file()
             if not entry_file:
-                raise FileNotFoundError("No entry file found (main.py or __init__.py)")
+                raise FileNotFoundError("未找到入口文件 (main.py 或 __init__.py)")
             
             # 导入模块
             if entry_file.name == 'main.py':
@@ -76,12 +78,12 @@ class PythonExecutor:
     
     def call_function(self, obj_name: str, method_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """调用Python函数
-        
+
         Args:
             obj_name: 对象名称（在context中或module的属性）
             method_name: 方法名称
             args: 方法参数
-            
+
         Returns:
             执行结果字典
         """
@@ -89,35 +91,65 @@ class PythonExecutor:
             # 获取对象
             obj = self._get_object(obj_name)
             
-            # 获取方法
-            if not hasattr(obj, method_name):
-                raise AttributeError(f"Object '{obj_name}' has no method '{method_name}'")
+            # 获取方法（使用 None 作为默认值，避免双重查找）
+            method = getattr(obj, method_name, None)
             
-            method = getattr(obj, method_name)
+            # 检查方法是否存在且可调用
+            if method is None:
+                return create_error_response(
+                    ErrorCode.METHOD_NOT_FOUND,
+                    f'对象 {obj_name} 不存在方法 {method_name}'
+                )
+            
+            if not callable(method):
+                return create_error_response(
+                    ErrorCode.METHOD_NOT_FOUND,
+                    f'{obj_name}.{method_name} 不是可调用方法'
+                )
             
             # 调用方法
-            if callable(method):
-                result = method(**args)
-            else:
-                raise TypeError(f"{obj_name}.{method_name} is not callable")
+            result = method(**args)
             
-            # 直接返回用户函数的结果（不额外包装）
-            # 如果用户函数返回字典且包含 status，直接返回
-            # 否则包装为标准格式
+            # 处理用户函数的返回值
             if isinstance(result, dict) and 'status' in result:
+                # 用户返回了标准格式的响应
+                if result.get('status') == 'error':
+                    # 错误响应：确保包含 error_code 字段
+                    if 'error_code' not in result:
+                        # 补充默认错误码
+                        result['error_code'] = ErrorCode.EXECUTION_FAILED
+                    # 确保包含 data 字段
+                    if 'data' not in result:
+                        result['data'] = {}
                 return result
             else:
-                return {
-                    'status': 'success',
-                    'result': result
-                }
-            
+                # 非标准格式，包装为成功响应
+                return create_success_response(
+                    message='执行成功',
+                    data={'result': result}
+                )
+        
+        except AttributeError as e:
+            # 这个异常只会来自 _get_object()
+            logger.error(f"Object not found: {obj_name}", exc_info=True)
+            return create_error_response(
+                ErrorCode.OBJECT_NOT_FOUND,
+                f'对象 {obj_name} 不存在'
+            )
+        except TypeError as e:
+            # 参数错误（通常是参数数量或类型不匹配）
+            logger.error(f"Invalid arguments for {obj_name}.{method_name}(): {e}")
+            return create_error_response(
+                ErrorCode.PROTOCOL_INVALID_PARAMS,
+                f'调用 {obj_name}.{method_name}() 参数错误: {str(e)}'
+            )
         except Exception as e:
-            logger.error(f"Error calling {obj_name}.{method_name}(): {e}")
-            return {
-                'status': 'error',
-                'message': str(e)
-            }
+            # 其他执行时错误
+            logger.error(f"Error calling {obj_name}.{method_name}(): {e}", exc_info=True)
+            return create_error_response(
+                ErrorCode.EXECUTION_FAILED,
+                f'执行 {obj_name}.{method_name}() 失败: {str(e)}'
+            )
     
     def _get_object(self, obj_name: str) -> Any:
         """获取对象（从context或module）

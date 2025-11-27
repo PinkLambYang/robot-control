@@ -1,5 +1,6 @@
 """机器人控制器 - 内置控制方法"""
 import logging
+import os
 import subprocess
 import time
 import threading
@@ -29,7 +30,10 @@ class RobotController:
         # DDS Client 管理
         self.dds_process = None
         self.dds_running = False
-        self.dds_path = "/home/noetix/work/dds_client_release/dds_bridge"
+        self.dds_path = os.environ.get(
+            'DDS_BRIDGE_PATH',
+            '/home/noetix/work/dds_client_release/dds_bridge'
+        )
     
     def start_dds_client(self) -> Dict[str, Any]:
         """启动 DDS Client
@@ -41,9 +45,8 @@ class RobotController:
             # 检查是否已经在运行
             if self.dds_running and self.dds_process and self.dds_process.poll() is None:
                 return {
-                    "status": "warning",
-                    "message": "DDS Client 已经在运行",
-                    "pid": self.dds_process.pid
+                    "status": "success",
+                    "message": "DDS Client 已经在运行"
                 }
             
             # 检查系统中是否有其他 dds_bridge 进程
@@ -57,16 +60,14 @@ class RobotController:
                 pid = check_result.stdout.decode().strip()
                 return {
                     "status": "success",
-                    "message": "DDS Client 已在系统中运行",
-                    "pid": pid
+                    "message": "DDS Client 已在系统中运行"
                 }
             
             # 检查文件是否存在
-            import os
             if not os.path.exists(self.dds_path):
                 return {
                     "status": "error",
-                    "message": f"DDS Bridge 文件不存在: {self.dds_path}"
+                    "message": "DDS Bridge 文件不存在",
                 }
             
             # 启动 DDS bridge
@@ -83,10 +84,10 @@ class RobotController:
             # 检查是否成功启动
             if self.dds_process.poll() is not None:
                 stderr = self.dds_process.stderr.read().decode()
+                logger.error(f"DDS bridge failed to start: {stderr}")
                 return {
                     "status": "error",
-                    "message": "DDS Client 启动失败",
-                    "error": stderr
+                    "message": "DDS Client 启动失败"
                 }
             
             self.dds_running = True
@@ -102,7 +103,7 @@ class RobotController:
             logger.error(f"Failed to start DDS client: {e}")
             return {
                 "status": "error",
-                "message": f"启动 DDS Client 失败: {str(e)}"
+                "message": "启动 DDS Client 失败"
             }
     
     def stop_dds_client(self) -> Dict[str, Any]:
@@ -199,8 +200,7 @@ class RobotController:
         self.current_mode = "prepare"
         return {
             "status": "success",
-            "message": "准备模式已激活",
-            "mode": "prepare"
+            "message": "准备模式已激活"
         }
     
     def walk_mode(self) -> Dict[str, Any]:
@@ -222,8 +222,7 @@ class RobotController:
         self.current_mode = "walk"
         return {
             "status": "success",
-            "message": "走路模式已激活",
-            "mode": "walk"
+            "message": "走路模式已激活"
         }
     
     def run_mode(self) -> Dict[str, Any]:
@@ -245,8 +244,7 @@ class RobotController:
         self.current_mode = "run"
         return {
             "status": "success",
-            "message": "跑步模式已激活",
-            "mode": "run"
+            "message": "跑步模式已激活"
         }
     
     def wave_hand(self) -> Dict[str, Any]:
@@ -267,8 +265,7 @@ class RobotController:
         )
         return {
             "status": "success",
-            "message": "打招呼动作已执行",
-            "action": "wave_hand"
+            "message": "打招呼动作已执行"
         }
     
     def shake_hand(self) -> Dict[str, Any]:
@@ -289,8 +286,7 @@ class RobotController:
         )
         return {
             "status": "success",
-            "message": "握手动作已执行",
-            "action": "shake_hand"
+            "message": "握手动作已执行"
         }
     
     def cheer(self) -> Dict[str, Any]:
@@ -311,8 +307,7 @@ class RobotController:
         )
         return {
             "status": "success",
-            "message": "欢呼动作已执行",
-            "action": "cheer"
+            "message": "欢呼动作已执行"
         }
     
     def move_up(self) -> Dict[str, Any]:
@@ -339,8 +334,7 @@ class RobotController:
         )
         return {
             "status": "success",
-            "message": "向上移动已执行",
-            "direction": "up"
+            "message": "向上移动已执行"
         }
     
     def move_down(self) -> Dict[str, Any]:
@@ -367,8 +361,7 @@ class RobotController:
         )
         return {
             "status": "success",
-            "message": "向下移动已执行",
-            "direction": "down"
+            "message": "向下移动已执行"
         }
     
     def move_left(self) -> Dict[str, Any]:
@@ -395,8 +388,7 @@ class RobotController:
         )
         return {
             "status": "success",
-            "message": "向左移动已执行",
-            "direction": "left"
+            "message": "向左移动已执行"
         }
     
     def move_right(self) -> Dict[str, Any]:
@@ -423,8 +415,7 @@ class RobotController:
         )
         return {
             "status": "success",
-            "message": "向右移动已执行",
-            "direction": "right"
+            "message": "向右移动已执行"
         }
     
     def get_status(self) -> Dict[str, Any]:

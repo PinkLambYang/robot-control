@@ -6,9 +6,10 @@ import sys
 from typing import Dict, Any, Optional
 import yaml
 
-from .project_manager import ProjectManager
+from .project_manager import ProjectManager, ProjectError
 from .python_executor import PythonExecutor
 from ipc.zmq_manager import ZMQManager
+from utils.error_codes import ErrorCode, create_error_response, create_success_response
 
 logger = logging.getLogger(__name__)
 
@@ -153,16 +154,16 @@ class Worker:
             elif cmd_type == 'client_disconnected':
                 return self._handle_client_disconnect(data)
             else:
-                return {
-                    'status': 'error',
-                    'message': f'Unknown command type: {cmd_type}'
-                }
+                return create_error_response(
+                    ErrorCode.PROTOCOL_UNKNOWN_COMMAND,
+                    f'未知命令类型: {cmd_type}'
+                )
         except Exception as e:
             logger.error(f"Error handling command: {e}", exc_info=True)
-            return {
-                'status': 'error',
-                'message': str(e)
-            }
+            return create_error_response(
+                ErrorCode.INTERNAL_ERROR,
+                '命令处理失败'
+            )
     
     def _handle_update(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """处理UPDATE指令：解压项目文件
@@ -183,10 +184,10 @@ class Worker:
             # 解压项目
             zip_data = data.get('zip_data')
             if not zip_data:
-                return {
-                    'status': 'error',
-                    'message': 'Missing zip_data field'
-                }
+                return create_error_response(
+                    ErrorCode.PROTOCOL_MISSING_FIELD,
+                    '缺少 zip_data 字段'
+                )
             
             project_path, project_type = self.project_mgr.extract_project(zip_data)
             
@@ -195,31 +196,30 @@ class Worker:
             
             logger.info(f"✓ Project extracted: {project_type}")
             
-            # 构造响应
-            response = {
-                'status': 'success',
-                'message': 'Project extracted successfully',
-                'data': {
-                    'project_type': project_type,
-                    'project_path': project_path,
-                    'worker_will_restart': need_restart  # 标识 Worker 是否将重启
-                }
-            }
-            
-            # 如果需要重启，设置标志并更新消息
+            # 构造响应消息
             if need_restart:
                 logger.info("Worker will restart to clear module cache")
                 self._should_restart = True
-                response['message'] = 'Project extracted successfully. Worker will restart to clear module cache.'
+                message = '项目上传成功，Worker 将重启以清理模块缓存'
+            else:
+                message = '项目上传成功'
             
-            return response
+            return create_success_response(
+                message=message,
+                data={'project_type': project_type}
+            )
             
-        except Exception as e:
+        except ProjectError as e:
+            # 项目管理器抛出的错误（包含错误码）
             logger.error(f"Update failed: {e}", exc_info=True)
-            return {
-                'status': 'error',
-                'message': f'Failed to update project: {str(e)}'
-            }
+            return create_error_response(e.error_code, e.message)
+        except Exception as e:
+            # 其他未知错误
+            logger.error(f"Update failed: {e}", exc_info=True)
+            return create_error_response(
+                ErrorCode.PROJECT_UPLOAD_FAILED,
+                '项目上传失败'
+            )
     
     def _handle_start(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """处理START指令：启动项目
@@ -240,10 +240,10 @@ class Worker:
                     self.current_project_type = project_type
                     logger.info(f"✓ Project recovered: {project_type}")
                 else:
-                    return {
-                        'status': 'error',
-                        'message': 'No project loaded. Please upload a project first (UPDATE command)'
-                    }
+                    return create_error_response(
+                        ErrorCode.PROJECT_NOT_FOUND,
+                        '未找到项目，请先上传项目（UPDATE 命令）'
+                    )
             
             # 启动 Python 项目
             if self.current_project_type == 'python':
@@ -253,17 +253,21 @@ class Worker:
                     self._has_loaded_project = True
                 return result
             else:
-                return {
-                    'status': 'error',
-                    'message': f'Unsupported project type: {self.current_project_type}. Only Python projects are supported.'
-                }
+                return create_error_response(
+                    ErrorCode.PROJECT_INVALID_FORMAT,
+                    f'不支持的项目类型: {self.current_project_type}，仅支持 Python 项目'
+                )
                 
+        except ProjectError as e:
+            # 项目管理器抛出的错误（包含错误码）
+            logger.error(f"Start failed: {e}", exc_info=True)
+            return create_error_response(e.error_code, e.message)
         except Exception as e:
             logger.error(f"Start failed: {e}", exc_info=True)
-            return {
-                'status': 'error',
-                'message': f'Failed to start project: {str(e)}'
-            }
+            return create_error_response(
+                ErrorCode.PROJECT_LOAD_FAILED,
+                '项目启动失败'
+            )
     
     def _start_python_project(self) -> Dict[str, Any]:
         """启动Python项目"""
@@ -276,13 +280,9 @@ class Worker:
             
             logger.info("✓ Project started")
             
-            return {
-                'status': 'success',
-                'message': 'Python project started successfully',
-                'data': {
-                    'project_type': 'python'
-                }
-            }
+            return create_success_response(
+                message='Python 项目启动成功'
+            )
         except Exception as e:
             self.python_executor = None
             raise
@@ -303,17 +303,14 @@ class Worker:
                 
                 # 如果还是没有加载成功，返回错误
                 if not self.python_executor:
-                    return {
-                        'status': 'error',
-                        'message': 'No project loaded'
-                    }
+                    return create_error_response(ErrorCode.PROJECT_NOT_FOUND)
             
             # 只有Python项目支持process指令
             if self.current_project_type != 'python':
-                return {
-                    'status': 'error',
-                    'message': 'Only Python projects supported'
-                }
+                return create_error_response(
+                    ErrorCode.PROJECT_INVALID_FORMAT,
+                    '仅支持 Python 项目'
+                )
             
             # 解析参数
             obj_name = data.get('object')
@@ -321,10 +318,10 @@ class Worker:
             args = data.get('args', {})
             
             if not obj_name or not method_name:
-                return {
-                    'status': 'error',
-                    'message': 'Missing object or method'
-                }
+                return create_error_response(
+                    ErrorCode.PROTOCOL_MISSING_FIELD,
+                    '缺少 object 或 method 字段'
+                )
             
             # 调用函数并直接返回结果（同步响应）
             result = self.python_executor.call_function(obj_name, method_name, args)
@@ -333,11 +330,11 @@ class Worker:
             return result
             
         except Exception as e:
-            logger.error(f"Process failed: {e}")
-            return {
-                'status': 'error',
-                'message': str(e)
-            }
+            logger.error(f"Process failed: {e}", exc_info=True)
+            return create_error_response(
+                ErrorCode.EXECUTION_FAILED,
+                '命令执行失败'
+            )
     
     def _handle_client_disconnect(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """处理客户端断开：停止用户线程（不清理缓存）
@@ -356,16 +353,15 @@ class Worker:
             if self.python_executor:
                 self.python_executor.stop_threads()
             
-            return {
-                'status': 'success',
-                'message': 'User threads stopped successfully'
-            }
+            return create_success_response(
+                message='用户线程已成功停止'
+            )
         except Exception as e:
             logger.error(f"Failed to stop threads on disconnect: {e}", exc_info=True)
-            return {
-                'status': 'error',
-                'message': str(e)
-            }
+            return create_error_response(
+                ErrorCode.INTERNAL_ERROR,
+                '停止线程失败'
+            )
     
     def _handle_push_message(self, event: str, data: Any):
         """处理来自用户代码的推送消息

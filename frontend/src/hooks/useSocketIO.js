@@ -29,7 +29,7 @@ export const useSocketIO = () => {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
-        reconnectionAttempts: 5
+        reconnectionAttempts: 3
       })
       
       socketRef.current = socket

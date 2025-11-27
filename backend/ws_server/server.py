@@ -10,12 +10,10 @@ from fastapi.responses import JSONResponse
 from .connection_manager import ConnectionManager
 from .protocol import (
     validate_command,
-    create_success_response,
-    create_error_response,
-    create_callback_response,
     ProtocolError
 )
 from ipc.zmq_manager import ZMQManager
+from utils.error_codes import ErrorCode, create_error_response
 
 logger = logging.getLogger(__name__)
 
@@ -55,23 +53,18 @@ class SocketIOServer:
             # 检查是否已有连接
             if not self.conn_mgr.can_connect():
                 logger.warning(f"⚠ Connection rejected (another client connected)")
-                await self.sio.emit('error', {
-                    'message': 'Another client is already connected'
-                }, room=sid)
-                return False
-            
+                error_response = create_error_response(ErrorCode.CONNECTION_REJECTED)
+                raise socketio.exceptions.ConnectionRefusedError(f"{error_response['error_code']}:{error_response['message']}")
             # 接受连接
             self.conn_mgr.connect_socketio(sid)
             logger.info(f"✓ Client connected: {sid}")
-            
+
             # 启动回调监听任务
             self.callback_tasks[sid] = asyncio.create_task(
                 self._listen_callbacks(sid)
             )
-            
+  
             # 发送连接成功消息
-            await self.sio.emit('connected', {'message': 'Connected successfully'}, room=sid)
-            
             return True
         
         @self.sio.event
@@ -159,32 +152,18 @@ class SocketIOServer:
             # 发送到Worker并等待响应
             response = self.zmq.send_command(worker_msg)
             
-            # 返回响应
-            if response.get('status') == 'success':
-                return {
-                    'status': 'success',
-                    'message': response.get('message', ''),
-                    'data': response.get('data', {})
-                }
-            else:
-                return {
-                    'status': 'error',
-                    'message': response.get('message', 'Unknown error'),
-                    'data': response.get('data', {})
-                }
+            # 返回响应（Worker 已经返回标准格式）
+            return response
         
         except ProtocolError as e:
             logger.error(f"Protocol error: {e}")
-            return {
-                'status': 'error',
-                'message': str(e)
-            }
+            return create_error_response(e.error_code, e.message)
         except Exception as e:
             logger.error(f"Error handling command: {e}", exc_info=True)
-            return {
-                'status': 'error',
-                'message': f"Internal error: {str(e)}"
-            }
+            return create_error_response(
+                ErrorCode.INTERNAL_ERROR,
+                '操作失败，请稍后重试'
+            )
     
     async def _listen_callbacks(self, sid: str):
         """监听Worker的异步回调
