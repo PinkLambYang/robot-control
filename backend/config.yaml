@@ -4,8 +4,9 @@ websocket:
   max_message_size: 104857600  # 100MB
   
   security:
-    # Token 远程验证（通过 auth_service）
-    auth_service_url: "http://127.0.0.1:3124"
+    # Token 验证配置
+    auth_enabled: false  # 是否启用 token 验证（开发环境可设为 false）
+    auth_service_url: "http://127.0.0.1:3124"  # Token 远程验证服务地址
     
     # 消息加密配置
     encryption_enabled: true

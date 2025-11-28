@@ -48,9 +48,14 @@ class SocketIOServer:
         # 初始化安全模块
         security_config = config.get('websocket', {}).get('security', {})
         
-        # Auth Service 远程验证
-        self.auth_service_url = security_config.get('auth_service_url', 'http://localhost:3124')
-        logger.info("✓ Token Verification: Remote auth_service at %s", self.auth_service_url)
+        # Token 验证配置
+        self.auth_enabled = security_config.get('auth_enabled', True)
+        if self.auth_enabled:
+            self.auth_service_url = security_config.get('auth_service_url', 'http://localhost:3124')
+            logger.info("✓ Token Verification: Enabled (auth_service at %s)", self.auth_service_url)
+        else:
+            self.auth_service_url = None
+            logger.warning("⚠ Token Verification: DISABLED (development mode)")
         
         # 消息加密（使用 crypto-js 兼容格式）
         self.encryption_enabled = security_config.get('encryption_enabled', False)
@@ -75,22 +80,29 @@ class SocketIOServer:
         async def connect(sid, environ, auth=None):
             """客户端连接（需要身份验证）"""
             try:
-                # 1. 从请求中提取 token（支持 auth 对象、query string、headers）
-                token = TokenExtractor.extract_from_environ(environ, auth)
-                
-                if not token:
-                    logger.warning("⚠ Connection rejected: no token provided")
-                    error_msg = f"{ErrorCode.AUTH_TOKEN_MISSING.value}:缺少认证 Token"
-                    raise socketio.exceptions.ConnectionRefusedError(error_msg)
-                
-                # 2. 调用 auth_service 验证 token
-                payload = await self._verify_token_remote(token)
-                
-                if not payload:
-                    raise socketio.exceptions.ConnectionRefusedError(f"{ErrorCode.AUTH_TOKEN_INVALID.value}:Token非法或者过期")
-                
-                user_id = payload.get('user_id', 'anonymous')
-                logger.debug(f"Token verified for user: {user_id}")
+                # 1. Token 验证（如果启用）
+                if self.auth_enabled:
+                    # 从请求中提取 token（支持 auth 对象、query string、headers）
+                    token = TokenExtractor.extract_from_environ(environ, auth)
+                    
+                    if not token:
+                        logger.warning("⚠ Connection rejected: no token provided")
+                        error_msg = f"{ErrorCode.AUTH_TOKEN_MISSING.value}:缺少认证 Token"
+                        raise socketio.exceptions.ConnectionRefusedError(error_msg)
+                    
+                    # 调用 auth_service 验证 token
+                    payload = await self._verify_token_remote(token)
+                    
+                    if not payload:
+                        raise socketio.exceptions.ConnectionRefusedError(f"{ErrorCode.AUTH_TOKEN_INVALID.value}:Token非法或者过期")
+                    
+                    user_id = payload.get('user_id', 'anonymous')
+                    logger.debug(f"Token verified for user: {user_id}")
+                else:
+                    # 开发模式：跳过 token 验证
+                    user_id = 'dev_user'
+                    payload = {'user_id': user_id, 'username': 'dev_user', 'role': 'developer'}
+                    logger.info("⚠ Development mode: Token verification skipped")
                 
                 # 3. 检查是否已有连接
                 if not self.conn_mgr.can_connect():

@@ -41,15 +41,8 @@ export const useSocketIO = () => {
     addLog(`正在连接到 ${url}...`, 'info')
     
     try {
-      let authToken = getTokenFromURL()
+      const authToken = getTokenFromURL()
       
-      if (!authToken) {
-        addLog('✗ 未找到 Token', 'error')
-        return
-      }
-      
-      addLog('✓ Token 已加载', 'success')
-
       // 2. 初始化加密（固定启用）
       if (encryptionEnabled) {
         cryptoRef.current = new AESCrypto(encryptionKey)
@@ -63,7 +56,7 @@ export const useSocketIO = () => {
         reconnectionDelay: 1000,
         reconnectionAttempts: 3,
         auth: {
-          token: authToken  // 使用 auth 对象（推荐方式）
+          token: authToken || ''  // 使用 auth 对象（推荐方式）
         }
       })
       
