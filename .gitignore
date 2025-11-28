@@ -23,6 +23,7 @@ htmlcov/
 backend/storage/logs/*
 backend/storage/projects/current/
 *.log
+backend/deploy/*
 
 # Environment variables
 .env
@@ -53,4 +54,5 @@ Thumbs.db
 # Node.js (for robot-control-web)
 robot-control-web/node_modules/
 robot-control-web/dist/
+
 
