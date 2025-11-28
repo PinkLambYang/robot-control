@@ -10,6 +10,7 @@ from .project_manager import ProjectManager, ProjectError
 from .python_executor import PythonExecutor
 from ipc.zmq_manager import ZMQManager
 from utils.error_codes import ErrorCode, create_error_response, create_success_response
+from utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -394,10 +395,11 @@ class Worker:
 
 def start_worker(config_path: str = 'config.yaml'):
     """启动Worker进程"""
-    # 配置日志
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    # 在子进程中重新配置日志
+    setup_logging(
+        name="worker",
+        console_level="INFO",
+        file_level="INFO"
     )
     
     # 加载配置

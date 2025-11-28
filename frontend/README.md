@@ -8,6 +8,8 @@
 - ⚡️ **Vite** - 极速的开发服务器和构建工具
 - 🎨 **组件化架构** - 模块化的组件设计
 - 🔌 **Socket.IO 支持** - 实时双向通信，自动重连
+- 🔒 **JWT 认证** - URL 参数传递 Token（零配置）
+- 🔐 **自动加密** - AES-256-GCM 消息加密（默认启用）
 - 📱 **响应式设计** - 适配各种屏幕尺寸
 - 🔄 **自动重连** - 网络断开自动恢复连接
 - 💓 **心跳检测** - 内置连接保活机制
@@ -109,12 +111,21 @@ export default defineConfig({
    npm run dev
    ```
 
-3. **连接并直接使用**
-   - 打开 `http://localhost:3000`
+3. **获取 Token 并访问**
+   ```bash
+   # 从认证服务获取 Token
+   curl http://localhost:3124/auth/token/test_user
+   
+   # 复制返回的 access_token，拼接到 URL 访问
+   http://localhost:3000/?token=你的access_token
+   ```
+
+4. **连接并使用**
+   - 输入服务器地址（默认：`http://10.240.5.129:8000`）
    - 点击"连接"按钮
    - 🚀 **直接执行 PROCESS 指令！**系统会自动加载默认项目
 
-4. **执行指令**
+5. **执行指令**
    - 输入对象名和方法名（默认：`robot_controller.prepare_mode`）
    - 点击"执行指令"或使用快速命令按钮
    - 查看日志面板获取执行结果

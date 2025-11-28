@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import Dict, Any, Tuple
 import logging
+from utils.error_codes import ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +25,12 @@ def validate_command(data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
 
     Args:
         data: 客户端发送的消息字典
-
     Returns:
         (command_type, parsed_data) 元组
 
     Raises:
         ProtocolError: 协议格式错误
     """
-    from utils.error_codes import ErrorCode
-
     if not isinstance(data, dict):
         raise ProtocolError(ErrorCode.PROTOCOL_INVALID_FORMAT, "Message must be a JSON object")
 
@@ -60,8 +58,6 @@ def validate_update_command(data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         "data": "base64_encoded_zip_data"
     }
     """
-    from utils.error_codes import ErrorCode
-
     if 'data' not in data:
         raise ProtocolError(ErrorCode.PROTOCOL_INVALID_PARAMS, "UPDATE command requires 'data' field")
 
@@ -95,8 +91,6 @@ def validate_process_command(data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]
         }
     }
     """
-    from utils.error_codes import ErrorCode
-
     if 'params' not in data:
         raise ProtocolError(ErrorCode.PROTOCOL_INVALID_PARAMS, "PROCESS command requires 'params' field")
 

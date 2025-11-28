@@ -23,6 +23,11 @@ class ErrorCode(str, Enum):
     # === 00xxx: 连接层错误 (Socket.IO 连接阶段) ===
     CONNECTION_REJECTED = "00001"              # 连接被拒绝(已有其他客户端)
     CONNECTION_LIMIT_REACHED = "00002"         # 达到连接数限制
+    
+    # 认证相关错误
+    AUTH_TOKEN_MISSING = "00010"               # 缺少认证 Token
+    AUTH_TOKEN_INVALID = "00011"               # Token 无效或格式错误
+    AUTH_TOKEN_EXPIRED = "00012"               # Token 已过期
 
     # === 01xxx: 协议层错误 ===
     PROTOCOL_INVALID_FORMAT = "01001"          # 请求格式无效
@@ -53,6 +58,9 @@ ERROR_MESSAGES: Dict[str, str] = {
     # 00xxx: 连接层
     ErrorCode.CONNECTION_REJECTED: "连接被拒绝,已有其他客户端连接",
     ErrorCode.CONNECTION_LIMIT_REACHED: "达到最大连接数限制",
+    ErrorCode.AUTH_TOKEN_MISSING: "缺少认证 Token",
+    ErrorCode.AUTH_TOKEN_INVALID: "Token 无效",
+    ErrorCode.AUTH_TOKEN_EXPIRED: "Token 已过期",
 
     # 01xxx: 协议层
     ErrorCode.PROTOCOL_INVALID_FORMAT: "请求格式错误",

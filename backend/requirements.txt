@@ -1,8 +1,10 @@
 # Python 3.8+ 兼容
-fastapi>=0.104.1
-uvicorn>=0.24.0
-pyzmq>=26.0.0
-pyyaml>=6.0.1
-python-socketio>=5.11.0
+fastapi>=0.104.1          # Web框架（Socket.IO服务器）
+uvicorn>=0.24.0            # ASGI服务器
+pyzmq>=26.0.0              # 进程间通信（IPC）
+pyyaml>=6.0.1              # 配置文件解析
+python-socketio>=5.11.0    # Socket.IO服务器
+pycryptodome>=3.18.0       # 消息加密（AES）
+httpx>=0.24.0              # HTTP客户端（调用auth_service）
 
 

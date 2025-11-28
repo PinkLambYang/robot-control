@@ -45,13 +45,10 @@ export const CommandPanel = ({ isConnected, onSendCommand, addLog }) => {
       }
     }
     onSendCommand('process', data, (response) => {
-      console.log('response', response)
       if (response.status === 'success') {
-        addLog('DDS Client 启动成功', 'success')
         setDdsStarted(true)
-      } else {
-        addLog('DDS Client 启动失败', 'error')
-      }
+      } 
+      addLog(response.message, response.status)
     })
   }
 
@@ -64,12 +61,7 @@ export const CommandPanel = ({ isConnected, onSendCommand, addLog }) => {
       }
     }
     onSendCommand('process', data, (response) => {
-      if (response.status === 'success') {
-        addLog('DDS Client 停止成功', 'success')
-      } else {
-        addLog(`DDS Client 停止: ${response.message}`, 'warning')
-      }
-      // 无论成功还是失败，都标记为已停止，让用户能重试
+      addLog(response.message, response.status)
       setDdsStarted(false)
     })
   }

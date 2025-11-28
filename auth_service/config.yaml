@@ -1,0 +1,11 @@
+server:
+  host: "0.0.0.0"
+  port: 3124
+
+jwt:
+  private_key_path: "keys/private_key.pem"
+  public_key_path: "keys/public_key.pem"
+  algorithm: "RS256"
+  expire_seconds: 3600  # 1小时
+  issuer: "robot-auth-service"  # Token签发者标识
+

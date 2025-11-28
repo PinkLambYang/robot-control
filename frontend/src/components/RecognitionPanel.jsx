@@ -117,14 +117,12 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
     }
 
     onSendCommand('process', data, (response) => {
-      if (response.status === 'success' && response.data?.status === 'success') {
+      if (response.status === 'success') {
         setIsRecognizing(true)
         setLatestResult(null)
         setRecognitionCount(0)
-        addLog(`回调结果: ${response.message}`, 'success')
-      } else {
-        addLog(`✗ ${response.status === 'error' ? response.message : response.data?.status === 'error' ? response.data?.message : 'Unknown error'}`, 'error')
-      }
+      } 
+      addLog(response.message, response.status)
     })
   }, [onSendCommand, addLog])
 
@@ -138,12 +136,10 @@ export const RecognitionPanel = ({ isConnected, onSendCommand, socket, addLog })
     }
 
     onSendCommand('process', data, (response) => {
-      if (response.status === 'success' && response.data?.status === 'success') {
+      if (response.status === 'success' ) {
         setIsRecognizing(false)
-        addLog(`✓ ${response.message}`, 'info')
-      } else {
-        addLog(`✗ ${response.status === 'error' ? response.message : response.data?.status === 'error' ? response.data?.message : 'Unknown error'}`, 'error')
-      }
+      } 
+      addLog(response.message, response.status)
     })
   }, [onSendCommand, addLog])
 

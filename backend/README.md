@@ -6,8 +6,10 @@
 
 - 🔧 **双进程架构** - Socket.IO Server + Worker 进程，职责分离
 - 🔌 **Socket.IO 通信** - 实时双向通信，自动重连，心跳检测
+- 🔒 **JWT 身份认证** - 连接前验证，防止未授权访问
+- 🔐 **AES-256-GCM 加密** - 可选消息级加密，保护通讯内容
 - ⚡️ **IPC 通信** - 使用 ZeroMQ Unix Domain Socket 实现进程间通信
-- 🔐 **单客户端限制** - 同一时刻只允许一个客户端连接，避免冲突
+- 🎯 **单客户端限制** - 同一时刻只允许一个客户端连接，避免冲突
 - 🐍 **Python 项目支持** - 动态导入模块，实时函数调用
 - 🔄 **自动重启** - UPDATE 后自动重启 Worker 清理模块缓存
 - 🧹 **智能线程清理** - WebSocket 断开时自动停止用户线程，保留缓存快速重连
@@ -18,6 +20,122 @@
 - Python 3.8+
 - ZeroMQ
 - 操作系统：Linux/macOS/Windows
+
+## 🔐 安全配置
+
+系统采用**独立认证服务架构**，职责分离，易于扩展。
+
+### 架构说明
+
+```
+前端 → 认证服务 (3124) → 签发 Token
+前端 → Backend (8000)     → 验证 Token (公钥)
+```
+
+- **认证服务**：独立服务，负责用户认证和 Token 签发
+- **Backend**：仅验证 Token，专注业务逻辑
+
+### 快速开始
+
+#### 1. 启动认证服务
+
+```bash
+cd auth_service
+
+# 生成 RSA 密钥对（首次运行）
+mkdir -p keys && cd keys
+openssl genrsa -out private_key.pem 2048
+openssl rsa -in private_key.pem -pubout -out public_key.pem
+cd ..
+
+# 安装依赖并启动
+pip install -r requirements.txt
+python main.py  # 运行在 3124 端口
+```
+
+#### 2. Backend 配置
+
+编辑 `config.yaml`：
+
+```yaml
+websocket:
+  security:
+    auth_service_url: "http://localhost:3124"
+```
+
+#### 3. 获取 Token
+
+```bash
+# 方式1：快速获取（开发测试）
+curl http://localhost:3124/auth/token/test_user
+
+# 方式2：用户登录
+curl -X POST http://localhost:3124/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "test_user", "password": "test123"}'
+```
+
+#### 4. 使用 Token 连接
+
+系统支持 3 种方式传递 Token：
+
+**方式 1：Auth 对象（推荐 - Socket.IO 标准）** ⭐⭐⭐⭐⭐
+```javascript
+const socket = io('http://localhost:8000', {
+  auth: {
+    token: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'
+  }
+})
+```
+
+**方式 2：HTTP Headers（推荐 - RESTful 标准）** ⭐⭐⭐⭐⭐
+```javascript
+const socket = io('http://localhost:8000', {
+  extraHeaders: {
+    'Authorization': 'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'
+  }
+})
+```
+
+**方式 3：Query String（不推荐 - 安全性较低）** ⚠️
+```javascript
+const socket = io('http://localhost:8000', {
+  query: {
+    token: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'
+  }
+})
+```
+
+**优先级**：Auth 对象 > Headers > Query String
+
+**安全建议**：
+- ✅ **推荐**：使用 Auth 对象或 Headers
+- ⚠️ **避免**：使用 Query String（会被日志记录、浏览器历史保存）
+- 🔒 **生产环境**：务必启用 HTTPS
+
+前端默认使用 **Auth 对象**方式，无需 Bearer 前缀。
+
+### 认证服务测试用户
+
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| test_user | test123 | user |
+| admin | admin123 | admin |
+| robot_user | robot123 | operator |
+
+### 运行测试
+
+```bash
+# 安全功能测试
+python tests/test_security.py
+```
+
+### 生产环境部署
+
+将认证服务替换为真实用户系统
+
+详细文档：
+- [认证服务文档](../auth_service/README.md)
 
 ## 📦 安装
 
@@ -33,6 +151,9 @@ pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 - **python-socketio** - Socket.IO 服务端实现
 - **pyzmq** - ZeroMQ Python 绑定
 - **pyyaml** - 配置文件解析
+- **PyJWT** - JWT Token 处理
+- **cryptography** - 加密支持
+- **pycryptodome** - AES 加密实现
 
 ## 🚀 启动
 

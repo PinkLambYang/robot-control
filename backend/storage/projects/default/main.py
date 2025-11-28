@@ -65,6 +65,7 @@ class RobotController:
             
             # 检查文件是否存在
             if not os.path.exists(self.dds_path):
+                logger.error(f"Failed to start DDS client: {self.dds_path} not found")
                 return {
                     "status": "error",
                     "message": "DDS Bridge 文件不存在",
